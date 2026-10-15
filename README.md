@@ -58,11 +58,21 @@ python sample_seed.py
 
 ### 5. Start the API
 
-From the directory containing the `app` package, run:
+### 5. Start the API
+
+From the repository root directory, run:
 
 ```bash
-uvicorn app.main:app --port 8000 --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
+
+If Uvicorn is not installed in your active environment, install the dependencies first:
+
+```bash
+pip install -r requirements.txt
+```
+
+After the server starts, open the API documentation at `http://127.0.0.1:8000/docs`.
 
 If using a different working directory, adjust the command so Python can locate the `app` package.
 
