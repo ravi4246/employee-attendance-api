@@ -2,20 +2,20 @@
 
 ## 1. Indexes
 
-I created a unique index on `employees.emp_code` to prevent duplicate employee codes, and a unique compound index on `attendance_logs.emp_code` and `date` to allow only one attendance record per employee per day. I added department and employee-code indexes for employee filtering and sorting, plus date, status, and late-minute indexes for attendance queries and analytics. I considered adding indexes to every field but rejected that because extra indexes consume storage and slow down writes.
+I created a unique index on `employees.emp_code` to prevent duplicate employee codes and a unique compound index on `attendance_logs.emp_code` and `date` to allow only one attendance record per employee per day. Additional indexes support department filtering, employee sorting, date-based attendance queries, status filtering, late-arrival queries, and employee punch-in history. I avoided indexing every field because extra indexes consume storage and can slow down inserts and updates.
 
 ## 2. Punch-in race
 
-Two identical punch-in requests may both check for an existing record and find none. The unique compound index is the final safeguard: only one insert can succeed. The other request receives a duplicate-key error, which the API should convert to HTTP 409 Conflict.
+Two simultaneous punch-in requests may both find no existing record. The unique compound index provides the final safeguard: only one insert can succeed. The duplicate-key error is converted to HTTP 409 Conflict.
 
-## 3. Ties
+## 3. Leaderboard ties
 
-The leaderboard uses competition ranking, so equal late-minute totals receive the same rank. If a tie crosses the requested limit, all employees tied at the cutoff are returned rather than arbitrarily excluding someone.
+The leaderboard uses competition ranking. Employees with equal total late minutes receive the same rank. If a tie crosses the requested limit, all employees tied at that rank are included.
 
-## 4. Headcount
+## 4. Department headcount
 
-The department summary starts from employees and looks up their attendance records. Therefore, employees with no attendance logs are still counted if they joined by the end of the selected month.
+The department summary starts from the employee collection and looks up attendance records. This allows employees without attendance logs to remain included in headcount if they joined by the end of the selected month.
 
-## 5. Scaling to 100x data
+## 5. Scaling to 100× data
 
-I would test query plans and workload first, then optimize aggregation pipelines and indexes based on measured bottlenecks.
+I would first test representative workloads and inspect MongoDB execution plans, including index usage and documents examined. I would measure query latency and identify bottlenecks before changing the aggregation pipelines or indexes. I would also test concurrent requests and realistic data volumes, review memory usage for large aggregations, and use pagination where appropriate. Any optimization would be validated with correctness tests and performance measurements before deployment.
