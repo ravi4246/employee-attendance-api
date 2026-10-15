@@ -2,37 +2,37 @@
 
 ## Starter Code Defect Review
 
-The starter implementation was reviewed against the assignment's problem statement, OpenAPI contract, and data model.
+The starter implementation was reviewed against the assignment's problem statement, OpenAPI contract, and data model. The following issues and fixes should be verified against the original starter code and final implementation.
 
-| # | Where (function / line) | What is wrong | How you'd notice it (test, input, or symptom) | How you fixed it |
+| # | Area | Defect or concern | How to verify | Fix in final implementation |
 |---|---|---|---|---|
-| 1 | `health()` | The health endpoint returns success without checking MongoDB availability. | Stop MongoDB and call `GET /health`; it still reports success. | Added a database ping and return a service-unavailable response when MongoDB cannot be reached. |
-| 2 | `create_employee()` | Employee fields are not fully validated against the contract. | Submit malformed employee codes, invalid email addresses, invalid dates, or identical shift start/end times. | Added validation for employee code, email, field lengths, dates, and shift times. |
-| 3 | `create_employee()` | Checking for an existing employee before inserting is not atomic. | Send concurrent requests with the same `emp_code`. | Enforced a unique MongoDB index and handled duplicate-key errors. |
-| 4 | `create_employee()` | `created_at` is created as a naive datetime. | Inspect the stored value and compare its timezone handling with UTC timestamps. | Store a timezone-aware datetime consistently. |
-| 5 | `list_employees()` | Invalid pagination returns `400` rather than the contract-required validation response. | Submit `page=0` or `page_size=0`. | Validate query parameters and return `422` for invalid values. |
-| 6 | `punch_in()` | Checking for an existing attendance record and then inserting it creates a race condition. | Send simultaneous punch-in requests for the same employee and date. | Retained the unique `(emp_code, date)` index and handle duplicate-key errors as conflicts. |
-| 7 | `punch_in()` | The initial implementation does not support the full set of attendance status and derived-field rules. | Try invalid statuses and inspect the derived fields of created records. | Validate allowed statuses and calculate attendance fields according to the contract. |
-| 8 | `punch_in()` | Timestamp validation and calendar-date handling need to follow the complete contract, including overnight shifts and second truncation. | Test invalid epoch values and punch-ins around midnight for overnight shifts. | Validate integer epoch milliseconds, truncate to whole seconds, and calculate the IST attendance date using the employee's shift. |
-| 9 | `compute_late_minutes()` | Late-arrival calculation has important boundary conditions that must match the strict ten-minute grace period. | For a 09:30 shift, test 09:40:00 and 09:40:01. | Apply the strict threshold and floor elapsed late seconds to whole minutes. |
-| 10 | `compute_overtime()` | Overtime must be based on the correct shift-end datetime and must not be counted below the 30-minute threshold. | Test punch-outs just before and at 30 minutes after shift end, including overnight shifts. | Calculate against the correct shift-end date and count whole minutes only when overtime reaches 30 minutes. |
-| 11 | `punch_out()` | The starter does not enforce the maximum allowed duration between punch-in and punch-out. | Submit a punch-out more than 24 hours after punch-in. | Reject punch-outs outside the allowed duration. |
-| 12 | `punch_out()` | The same missing-record check is duplicated, and concurrent requests require atomic protection. | Inspect the duplicate branch and send simultaneous punch-out requests. | Removed redundant checking and used a conditional atomic update so only one request can close the record. |
-| 13 | `punch_out()` | The health and attendance endpoints do not consistently handle MongoDB failures. | Make MongoDB unavailable while requesting an endpoint. | Added appropriate database-error handling where required. |
-| 14 | Starter endpoint coverage | Required contract endpoints are missing from the starter implementation. | Compare the starter routes with `openapi.yaml` and inspect Swagger. | Implemented attendance correction, monthly analytics, department summary, late leaderboard, department trend, and explain endpoints. |
-| 15 | Analytics endpoints | Aggregation requirements cannot be met by returning simple document lists or calculating all analytics in Python. | Inspect the analytics implementation and test against a large dataset. | Implemented MongoDB aggregation pipelines for analytics and preserved the contract's filtering, date, ranking, and rounding rules. |
-| 16 | `/admin/explain/{endpoint}` | The starter does not provide the required explain endpoint. | Call the endpoint listed in the OpenAPI contract. | Added execution-plan reporting using MongoDB `explain("executionStats")` for the relevant query or aggregation. |
-| 17 | Attendance corrections | The starter does not implement correction history or enforce the correction rules. | Correct an attendance record and inspect its history, derived fields, and invalid-change responses. | Added validation, derived-field recalculation, and an audit-history entry for each successful correction. |
-| 18 | MongoDB indexes | The initial indexes do not cover all query patterns needed by the analytics and explain endpoints. | Run explain plans against representative filters and a large dataset. | Added indexes selected for the relevant employee, date, status, and late-arrival queries. |
+| 1 | `health()` | Health status may not reflect MongoDB availability. | Stop MongoDB and call `GET /health`. | Ping MongoDB and return HTTP 503 if unavailable. |
+| 2 | `create_employee()` | Employee fields need contract-level validation. | Test malformed employee codes, emails, dates, and shift times. | Add field validation and reject identical shift start and end times. |
+| 3 | Employee creation | Duplicate employee checks can race. | Submit simultaneous requests with the same employee code. | Use a unique index and handle duplicate-key errors with HTTP 409. |
+| 4 | Employee timestamps | Naive datetimes can cause inconsistent timezone handling. | Inspect stored and returned timestamps. | Store timezone-aware UTC timestamps consistently. |
+| 5 | Pagination | Invalid page values must be rejected. | Try `page=0` and `page_size=0`. | Validate query parameters and return HTTP 422. |
+| 6 | `punch_in()` | Concurrent requests could create duplicate attendance records without database protection. | Send simultaneous punch-ins for the same employee and date. | Use a unique compound index and handle duplicate-key errors. |
+| 7 | Punch-in status | Invalid attendance statuses must not be accepted. | Submit unsupported status values. | Validate allowed punch-in statuses. |
+| 8 | Timestamp handling | Epoch-millisecond values and attendance dates require consistent validation. | Test invalid timestamps and punches around midnight for overnight shifts. | Validate timestamps, truncate to whole seconds, and derive the attendance date using the employee's shift. |
+| 9 | Late calculation | The ten-minute grace-period boundary must be exact. | For a 09:30 shift, test 09:40:00 and 09:40:01. | Apply the specified strict threshold and whole-minute calculation. |
+| 10 | Overtime | Overtime depends on the correct shift-end date and threshold. | Test before, at, and after 30 minutes of overtime, including overnight shifts. | Calculate against the correct shift-end datetime and apply the specified threshold. |
+| 11 | `punch_out()` | Punch-out duration must be bounded. | Try punching out more than 24 hours after punch-in. | Reject durations outside the allowed window. |
+| 12 | `punch_out()` | Concurrent punch-outs must not overwrite each other. | Send two punch-out requests for the same attendance record. | Use a conditional atomic update and return HTTP 409 if another request wins. |
+| 13 | Database errors | Database failures need appropriate API error responses. | Make MongoDB unavailable and call relevant endpoints. | Handle database errors according to the endpoint requirements. |
+| 14 | Endpoint coverage | Required contract endpoints may be missing from the starter. | Compare starter routes with `openapi.yaml`. | Implement the required correction, analytics, trend, leaderboard, summary, and explain endpoints. |
+| 15 | Analytics | Analytics must follow the specified aggregation and calculation rules. | Compare results against known sample data and boundary cases. | Use MongoDB aggregation pipelines and validate filtering, rounding, and ranking. |
+| 16 | Explain endpoint | Query execution statistics are required for supported endpoints. | Call `/admin/explain/{endpoint}` using valid parameters. | Return MongoDB execution-plan information for supported queries and aggregations. |
+| 17 | Attendance correction | Corrections must validate changes and preserve audit history. | Correct a record and inspect derived fields and history. | Recalculate derived fields and record successful changes in history. |
+| 18 | Indexes | Index coverage must support important query patterns. | Run explain plans against representative queries. | Add indexes based on query patterns and measured execution plans. |
 
 ## Items Reviewed That Are Not Defects
 
-- **Epoch-millisecond range checks:** The starter's range validation is useful and should be retained; the complete implementation also needs the contract's timezone and truncation behavior.
-- **Unique employee-code index:** This is appropriate because `emp_code` is a stable unique identifier.
-- **Unique employee/date attendance index:** This is appropriate because an employee should have one attendance record per attendance date.
-- **Decimal half-up rounding:** The use of `Decimal` and `ROUND_HALF_UP` is appropriate for the specified rounding rules.
-- **Pagination defaults:** A default page of 1 and page size of 20 are appropriate when combined with the required validation and filtering behavior.
+- **Epoch-millisecond range checks:** Useful validation that should be retained alongside timezone and truncation rules.
+- **Unique employee-code index:** Appropriate for preventing duplicate employee codes.
+- **Unique employee/date attendance index:** Appropriate for allowing one attendance record per employee per date.
+- **Decimal half-up rounding:** Appropriate where the contract specifies half-up rounding.
+- **Pagination defaults:** Page 1 and page size 20 are reasonable defaults when invalid values are rejected.
 
 ## Review Notes
 
-The review was based on the starter implementation and the assignment contract. Before submission, each listed defect and fix should be verified against the final `app/main.py` and relevant tests. A successful happy-path response alone does not establish that boundary cases, concurrent requests, aggregation behavior, or large-dataset query plans are correct.
+These findings describe issues to verify against the original starter implementation. The final implementation should be checked against the contract and tested for validation errors, concurrency, timestamp boundaries, aggregation correctness, and query performance. A successful happy-path response alone does not prove that every requirement is satisfied.
